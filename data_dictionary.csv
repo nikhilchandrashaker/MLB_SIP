@@ -1,0 +1,16 @@
+file,column,description
+shutdown_opportunities_2000_2025.csv / half_innings_all_2000_2025.csv.gz,game_id,Retrosheet game id (home team + yyyymmdd + game number)
+,pitching_team / batting_team,Retrosheet team codes for the fielding and batting side of the half-inning
+,half,"T = top, B = bottom"
+,pitcher_id / pitcher,Retrosheet id and name of the pitcher who started the half-inning (gets the credit)
+,pitcher_is_home / pitcher_is_game_starter,1 if pitching team is home / pitcher is his team's starter that game
+,pitchers_used_in_half,Number of pitchers who faced a batter in the half-inning
+,own_runs_prior_half / own_batters_prior_half,Runs scored / plate appearances by the pitching team in the preceding half-inning
+,own_lead_entering,"Pitching team lead (runs) entering the half-inning, including the runs it just scored"
+,runs_allowed / scoreless / shutdown,Runs allowed in the half-inning; 1 if zero; shutdown = scoreless on an opportunity
+,expected_scoreless_prob,"Pitcher-agnostic context model: opponent offense-season, park era, inning, home/away, extra-inning runner rule"
+,win_prob_added,"Change in pitching-team win probability from the start to the next half-inning (empirical model); for the final half-inning, to the game result"
+,extra_inning_runner_rule,1 for extra innings in 2020-2025 (automatic runner on second)
+pitcher_*_sip.csv,SIP / expected_SIP / SIP_plus,"SIP (%), context-expected SIP, and their difference in points"
+,SIP_regressed / reliability_weight,Empirical-Bayes SIP pulled toward expectation; weight is the share of the observed deviation kept
+,baseline_scoreless_pct / gap_vs_own_baseline,Scoreless % in the pitcher's other half-innings; SIP minus that baseline

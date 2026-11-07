@@ -1,0 +1,72 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shutdown Inning Percentage (SIP) Explorer</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#17202e;--mut:#667085;--line:#e3e6ec;--navy:#1f3a5f;--red:#c8452c;--teal:#2a8c82;--gold:#d9a441}
+@media(prefers-color-scheme:dark){:root{--bg:#0f141c;--card:#171e29;--ink:#e8ecf2;--mut:#98a2b3;--line:#273142;--navy:#7fb0ee;--red:#ef7a62;--teal:#4cc0b3}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+header{padding:28px 20px 8px;max-width:1100px;margin:auto}h1{margin:0;font-size:26px}h1 span{color:var(--gold)}.sub{color:var(--mut);max-width:760px;margin:6px 0 0}
+main{max-width:1100px;margin:auto;padding:12px 20px 40px;display:grid;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}.card h2{margin:0 0 10px;font-size:16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.k{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}.k b{display:block;font-size:24px;color:var(--navy)}.k small{color:var(--mut)}
+#q{width:100%;padding:13px 14px;font-size:17px;border:2px solid var(--navy);border-radius:10px;background:var(--card);color:var(--ink)}
+#sug{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px}.chip{padding:5px 10px;border:1px solid var(--line);border-radius:999px;cursor:pointer;background:var(--bg);font-size:13px}.chip:hover{border-color:var(--navy)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:800px){.grid2{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;font-size:13.5px}th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line)}th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}th{cursor:pointer;color:var(--mut);font-weight:600;position:sticky;top:0;background:var(--card)}tr.r{cursor:pointer}tr.r:hover{background:var(--bg)}
+.ctl{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;align-items:center}select,input[type=number]{padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+.scroll{max-height:420px;overflow:auto}.pos{color:var(--teal)}.neg{color:var(--red)}.note{color:var(--mut);font-size:12.5px}
+.prof h3{margin:0}.stat{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:12px 0}.stat div{background:var(--bg);border-radius:10px;padding:8px 10px}.stat b{font-size:20px;display:block}
+svg text{fill:var(--mut);font-size:11px}
+</style></head><body>
+<header><h1>Shutdown Inning Percentage <span>(SIP)</span></h1>
+<p class="sub">How often does a pitcher throw a scoreless half-inning right after his own team scores? Retrosheet play-by-play, regular seasons 2000-2025. Search any pitcher below.</p></header>
+<main>
+<div class="kpis" id="kpis"></div>
+<div class="card"><input id="q" placeholder="Search a pitcher (e.g. Kershaw, Rivera, Verlander)..." autocomplete="off"><div id="sug"></div><div id="prof" class="prof"></div></div>
+<div class="card"><h2>Leaderboard</h2><div class="ctl">
+<label>Season <select id="ys"></select></label><label>Min opportunities <input id="mo" type="number" value="100" min="1" style="width:80px"></label>
+<label>Rank by <select id="rk"><option value="reg">Regressed SIP</option><option value="sip">Raw SIP</option><option value="plus">SIP+ (vs expected)</option><option value="opps">Opportunities</option></select></label>
+<label><input type="checkbox" id="rev"> Show worst first</label></div>
+<div class="scroll"><table id="lb"></table></div>
+<p class="note">Regressed SIP pulls each pitcher toward his context-expected SIP in proportion to how much of the spread among pitchers is sampling noise. SIP+ = SIP minus expected SIP (opponent offense, park era, inning, home/away).</p></div>
+<div class="grid2"><div class="card"><h2>League SIP vs baseline, by season</h2><div id="c1"></div></div>
+<div class="card"><h2>SIP by runs scored in the prior half-inning</h2><div id="c2"></div><p class="note">Flat line: a bigger inning does not change the shutdown odds. Dashed line = all other half-innings.</p></div></div>
+<div class="card"><h2>What the data says</h2><p>League SIP is <b id="a1"></b> versus <b id="a2"></b> for every other half-inning. A pitcher's SIP is mostly his ordinary run prevention in disguise: the split-half reliability of SIP is low, and the part of SIP that is <i>not</i> explained by his other innings shows no repeatable skill. Pitchers do slip a little with big leads (5+ runs): about <b id="a3"></b> points within the same pitchers.</p></div>
+</main>
+<script>
+const D=/*DATA*/;
+const P=D.p,S=D.s,L=D.l,PR=D.pr,ST=D.st;
+const f1=x=>x==null?'-':x.toFixed(1),f2=x=>x==null?'-':x.toFixed(2),cl=x=>x>0.05?'pos':x<-0.05?'neg':'';
+const byS={};S.forEach(r=>{(byS[r[0]]=byS[r[0]]||[]).push(r)});
+document.getElementById('kpis').innerHTML=[['League SIP',f1(D.k.sip)+'%'],['Baseline',f1(D.k.base)+'%'],['Opportunities',D.k.opps.toLocaleString()],['Pitchers',P.length.toLocaleString()],['Games',D.k.games.toLocaleString()]].map(a=>`<div class="k"><b>${a[1]}</b><small>${a[0]}</small></div>`).join('');
+a1.textContent=f1(D.k.sip)+'%';a2.textContent=f1(D.k.base)+'%';a3.textContent=f2(Math.abs(D.k.big));
+// P: [id,name,first,last,opps,shut,xsip,reg,basen,basepct]
+const sip=p=>100*p[5]/p[4];
+const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+function line(el,series,opt){const W=520,H=230,m={l:40,r:10,t:10,b:28};const xs=opt.x,all=series.flatMap(s=>s.y.filter(v=>v!=null)),lo=Math.floor(Math.min(...all)-1),hi=Math.ceil(Math.max(...all)+1);
+const X=i=>m.l+(W-m.l-m.r)*(xs.length==1?.5:i/(xs.length-1)),Y=v=>m.t+(H-m.t-m.b)*(1-(v-lo)/(hi-lo));let o=`<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+for(let v=lo;v<=hi;v+=Math.max(1,Math.round((hi-lo)/5))){o+=`<line x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${m.l-5}" y="${Y(v)+4}" text-anchor="end">${v}</text>`}
+xs.forEach((x,i)=>{if(xs.length<9||i%Math.ceil(xs.length/8)==0)o+=`<text x="${X(i)}" y="${H-8}" text-anchor="middle">${x}</text>`});
+series.forEach(s=>{let d='';s.y.forEach((v,i)=>{if(v!=null)d+=(d?'L':'M')+X(i)+' '+Y(v)});o+=`<path d="${d}" fill="none" stroke="${s.c}" stroke-width="2.2" ${s.dash?'stroke-dasharray="5 4"':''}/>`;s.y.forEach((v,i)=>{if(v!=null)o+=`<circle cx="${X(i)}" cy="${Y(v)}" r="3" fill="${s.c}"><title>${xs[i]}: ${f1(v)}%</title></circle>`})});
+if(opt.leg)o+=opt.leg.map((t,i)=>`<text x="${m.l+8+i*170}" y="${m.t+10}" style="fill:${series[i].c}">${t}</text>`).join('');el.innerHTML=o+'</svg>'}
+line(c1,[{y:L.map(r=>r[1]),c:'var(--navy)'},{y:L.map(r=>r[2]),c:'var(--red)',dash:1}],{x:L.map(r=>r[0]),leg:['SIP','Other half-innings']});
+line(c2,[{y:PR.map(r=>r[1]),c:'var(--navy)'},{y:PR.map(r=>D.k.base),c:'var(--red)',dash:1}],{x:PR.map(r=>r[0]),leg:['SIP','Baseline']});
+function profile(i){const p=P[i],rows=(byS[i]||[]).slice().sort((a,b)=>a[1]-b[1]);const s=sip(p),plus=s-p[6],gap=p[9]==null?null:s-p[9];
+document.getElementById('prof').innerHTML=`<h3 style="margin-top:14px">${p[1]} <span class="note">${p[2]}-${p[3]}</span></h3>
+<div class="stat"><div><b>${f1(s)}%</b>SIP (${p[5]}/${p[4]})</div><div><b>${f1(p[6])}%</b>Expected SIP</div><div><b class="${cl(plus)}">${plus>0?'+':''}${f2(plus)}</b>SIP+</div><div><b>${f1(p[7])}%</b>Regressed SIP</div><div><b>${p[9]==null?'-':f1(p[9])+'%'}</b>Other innings (${p[8]})</div><div><b class="${gap==null?'':cl(gap)}">${gap==null?'-':(gap>0?'+':'')+f1(gap)}</b>Gap vs own baseline</div></div>
+<div id="pc"></div><div class="scroll" style="max-height:260px"><table><tr><th>Season</th><th>Team</th><th>Opps</th><th>Shutdowns</th><th>SIP</th><th>Other innings</th></tr>${rows.map(r=>`<tr><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${f1(100*r[4]/r[3])}%</td><td>${r[5]==null?'-':f1(r[5])+'%'}</td></tr>`).join('')}</table></div>`;
+if(rows.length>1)line(pc,[{y:rows.map(r=>100*r[4]/r[3]),c:'var(--navy)'},{y:rows.map(r=>L.find(l=>l[0]==r[1])[1]),c:'var(--red)',dash:1}],{x:rows.map(r=>r[1]),leg:['Pitcher SIP','League SIP']});}
+const q=document.getElementById('q'),sug=document.getElementById('sug');
+function search(){const t=norm(q.value.trim());if(!t){sug.innerHTML='';return}const m=[];for(let i=0;i<P.length&&m.length<400;i++){if(norm(P[i][1]).includes(t)||P[i][0].startsWith(t))m.push(i)}m.sort((a,b)=>P[b][4]-P[a][4]);
+sug.innerHTML=m.slice(0,12).map(i=>`<span class="chip" data-i="${i}">${P[i][1]} <span class="note">${P[i][2]}-${P[i][3]} · ${P[i][4]} opps</span></span>`).join('')||'<span class="note">No match</span>';if(m.length==1)profile(m[0])}
+q.addEventListener('input',search);sug.addEventListener('click',e=>{const c=e.target.closest('.chip');if(c){profile(+c.dataset.i);window.scrollTo({top:q.offsetTop-10,behavior:'smooth'})}});
+ys.innerHTML='<option value="0">All seasons (career)</option>'+L.map(r=>`<option>${r[0]}</option>`).reverse().join('');
+function lb(){const y=+ys.value,mo=+document.getElementById('mo').value||1,k=rk.value;let rows;
+if(!y)rows=P.map((p,i)=>({i,n:p[1],t:p[2]+'-'+p[3],o:p[4],s:sip(p),x:p[6],r:p[7],b:p[9]}));
+else rows=S.filter(r=>r[1]==y).map(r=>({i:r[0],n:P[r[0]][1],t:r[2],o:r[3],s:100*r[4]/r[3],x:r[6]||P[r[0]][6],r:null,b:r[5]}));
+rows=rows.filter(r=>r.o>=mo);const key={reg:r=>r.r==null?r.s:r.r,sip:r=>r.s,plus:r=>r.s-r.x,opps:r=>r.o}[k];rows.sort((a,b)=>key(b)-key(a));if(rev.checked)rows.reverse();
+document.getElementById('lb').innerHTML=`<tr><th>#</th><th>Pitcher</th><th>${y?'Team':'Years'}</th><th>Opps</th><th>SIP</th><th>Expected</th><th>SIP+</th><th>${y?'-':'Regressed'}</th><th>Other inn.</th></tr>`+rows.slice(0,100).map((r,j)=>`<tr class="r" data-i="${r.i}"><td>${j+1}</td><td>${r.n}</td><td>${r.t}</td><td>${r.o}</td><td>${f1(r.s)}</td><td>${f1(r.x)}</td><td class="${cl(r.s-r.x)}">${f2(r.s-r.x)}</td><td>${r.r==null?'-':f1(r.r)}</td><td>${r.b==null?'-':f1(r.b)}</td></tr>`).join('')}
+ys.addEventListener('input',()=>{mo.value=ys.value=='0'?100:15});
+['ys','mo','rk','rev'].forEach(id=>document.getElementById(id).addEventListener('input',lb));
+document.getElementById('lb').addEventListener('click',e=>{const t=e.target.closest('tr.r');if(t){profile(+t.dataset.i);window.scrollTo({top:q.offsetTop-10,behavior:'smooth'})}});
+lb();
+</script></body></html>
